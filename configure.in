@@ -1,25 +1,3 @@
-# $Id: configure.in,v 1.2 2005-09-22 20:23:20 hww3 Exp $
-AC_INIT(sample_config.h.in)
-
-AC_MODULE_INIT()
-AC_CONFIG_HEADERS(fsevents_config.h)
-
-# CPPFLAGS="${CPPFLAGS} ${XML2_CFLAGS} ${XSLT_CFLAGS}"
-# LDFLAGS="${LDFLAGS} ${XML2_LIBS} ${XSLT_LIBS}"
-
-CMOD_LIBS=""
-CMOD_FLAGS=""
-
-AC_CHECK_HEADERS(CoreServices/CoreServices.h)
-AC_CHECK_LIB(CoreServices, FSEventStreamCreate) 
-
-
-AC_SUBST(CMOD_CFLAGS) 
-AC_SUBST(CMOD_LIBS)
-
-AC_OUTPUT(Makefile)
-
-
 # AC_CHECK_FRAMEWORK(FRAMEWORK, FUNCTION,
 #              [ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND],
 #              [OTHER-LIBRARIES])
@@ -69,3 +47,23 @@ AS_VAR_POPDEF([ac_Framework])dnl
 m4_define([AH_CHECK_FRAMEWORK],
 [AH_TEMPLATE(AS_TR_CPP(HAVE_FRAMEWORK_$1),
         [Define to 1 if you have the `]$1[' framework (-framework ]$1[).])])
+
+# $Id: configure.in,v 1.2 2005-09-22 20:23:20 hww3 Exp $
+AC_INIT(fsevents_config.h.in)
+
+AC_MODULE_INIT()
+AC_CONFIG_HEADERS(fsevents_config.h)
+
+# CPPFLAGS="${CPPFLAGS} ${XML2_CFLAGS} ${XSLT_CFLAGS}"
+# LDFLAGS="${LDFLAGS} ${XML2_LIBS} ${XSLT_LIBS}"
+
+CMOD_LIBS=""
+CMOD_FLAGS=""
+
+AC_CHECK_HEADERS(CoreServices/CoreServices.h)
+AC_CHECK_FRAMEWORK(CoreServices, FSEventStreamCreate) 
+
+AC_SUBST(CMOD_CFLAGS) 
+AC_SUBST(CMOD_LIBS)
+
+AC_OUTPUT(Makefile)

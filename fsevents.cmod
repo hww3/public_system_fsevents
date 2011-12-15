@@ -1,62 +1,248 @@
 /*! @module Public
  */
 
-/*! @module Sample
+/*! @module System
+ */
+
+/*! @module FSEvents
  */
 
 #define _GNU_SOURCE
 
-#include "sample_config.h"
+#include "fsevents_config.h"
 #include "util.h"
 
+#define ADD_ICONST(name) do {                   \
+        add_integer_constant(#name, name, 0);   \
+} while(0);
+
+#ifdef HAVE_FRAMEWORK_CORESERVICES
+
+#import <Foundation/Foundation.h>
+#import <CoreServices/CoreServices.h>
+
+static void event_callback(ConstFSEventStreamRef streamRef,
+                             void *clientCallBackInfo,
+                             size_t numEvents,
+                             void *eventPaths,
+                             const FSEventStreamEventFlags eventFlags[],
+                             const FSEventStreamEventId eventIds[]);
+
+static void backend_callback(struct callback *_cb,
+							        void *arg,
+					     			void *backend)
+							{
+							  if(backend)
+							  {
+							    struct timeval timeout = current_time;
+							    timeout.tv_usec += 20000;
+							    if(timeout.tv_usec > 1000000)
+							    {
+							      timeout.tv_usec-=1000000;
+							      timeout.tv_sec+=1;
+							    }
+							    backend_lower_timeout(backend, &timeout);
+							  } else
+							  {
+
+							     SInt32 result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
+						//	printf("result: %d, %d\n", result, kCFRunLoopRunTimedOut);
+							//    [[NSRunLoop currentRunLoop] runUntilDate: [NSDate date]];
+							  }
+							}
 
 
-/*! @class Sample
+/*! @class EventStream
  */
-
 DECLARATIONS
 
-typedef struct
+PIKECLASS EventStream
 {
-    int started;
-} SAMPLE_OBJECT_DATA;
+  CVAR FSEventStreamRef stream;
+  PIKEVAR function callback_func;
 
-CVAR SAMPLE_OBJECT_DATA   *object_data;
-
-
-/*! @decl void create(string appname)
- *!   Creates a new Public.Sample.Sample object
+/*! @decl void add_backend_runloop()
  *!
  */
-PIKEFUN void create(string appname)
+PIKEFUN int add_backend_runloop()
 {
-  pop_n_elems(args);
+      add_backend_callback( backend_callback, 0, 0);
 }
 
-PIKECLASS foo
+/*! @decl void create(array(string) paths)
+ *!   Creates a new Public.System.FSEvents.EventStream object
+ *!
+ */
+PIKEFUN void create(array paths, float latency, int|void sinceWhen, int|void flags)
 {
+  FSEventStreamContext context;
+  CFArrayRef _paths;
+  FSEventStreamEventId _sinceWhen;
+  FSEventStreamCreateFlags _flags;
+  int idx = 0, cnt = 0;
+
+  if(sinceWhen && sinceWhen->type == T_INT)
+  {
+    _sinceWhen = sinceWhen->u.integer;
+  }
+  else
+  {
+    _sinceWhen = kFSEventStreamEventIdSinceNow;
+  }
+
+  if(flags && flags->type == T_INT)
+  {
+    _flags = flags->u.integer;
+  }
+  else
+  {
+    _flags = kFSEventStreamCreateFlagNone;
+  }
+
+  context.version = 0;
+  context.info = THIS;
+  context.retain = NULL;
+  context.release = NULL;
+  context.copyDescription = NULL;
+  
+  _paths = CFArrayCreateMutable(NULL, paths->size, NULL);
+
+  for(idx = 0; idx < paths->size; idx++)
+  {
+    struct svalue sv;
+	CFStringRef str;
+    if(ITEM(paths)[idx].type != T_STRING) continue;
+    sv = ITEM(paths)[idx];
+	push_svalue(&sv);
+	f_string_to_utf8(1);
+    str = CFStringCreateWithBytes(NULL, (const UInt8 *)(Pike_sp[-1].u.string->str), (CFIndex)Pike_sp[-1].u.string->len, kCFStringEncodingUTF8, false);
+	pop_stack();
+	CFArrayInsertValueAtIndex( (CFMutableArrayRef)_paths, cnt, str);
+	cnt++;
+  }
+
+  THIS->stream = FSEventStreamCreate(kCFAllocatorDefault,
+		&event_callback,
+		&context,
+		_paths,
+		_sinceWhen,
+		latency,
+//		kFSEventStreamCreateFlagNone
+		_flags | kFSEventStreamCreateFlagUseCFTypes
+		);
+		
+  CFRelease(_paths);
+  pop_n_elems(args);
+
+  return;
 }
+
+PIKEFUN void set_callback(function callback)
+{
+  assign_svalue(&THIS->callback_func, callback);
+  pop_stack();
+}
+
+// TODO we should allow the runloop to be specified.
+PIKEFUN void start()
+{
+	CFRunLoopRef runLoop;
+	
+	runLoop = CFRunLoopGetCurrent();
+	
+	FSEventStreamScheduleWithRunLoop(THIS->stream, runLoop, kCFRunLoopDefaultMode);
+	FSEventStreamStart(THIS->stream);
+}
+
 
 PIKE_MODULE_INIT
 {
-  INIT;
-    SAMPLE_OBJECT_DATA * dta = 
-	(SAMPLE_OBJECT_DATA*)malloc(sizeof(SAMPLE_OBJECT_DATA));
-    if (!dta)
-        Pike_error("init_sample: Out of memory!\n");
+ ADD_ICONST(kFSEventStreamEventFlagNone);
+ ADD_ICONST(kFSEventStreamEventFlagMustScanSubDirs);
+ ADD_ICONST(kFSEventStreamEventFlagUserDropped);
+ ADD_ICONST(kFSEventStreamEventFlagKernelDropped);
+ ADD_ICONST(kFSEventStreamEventFlagEventIdsWrapped);
+ ADD_ICONST(kFSEventStreamEventFlagHistoryDone);
+ ADD_ICONST(kFSEventStreamEventFlagRootChanged);
+ ADD_ICONST(kFSEventStreamEventFlagMount);
+ ADD_ICONST(kFSEventStreamEventFlagUnmount);
+ ADD_ICONST(kFSEventStreamEventFlagItemCreated);
+ ADD_ICONST(kFSEventStreamEventFlagItemRemoved);
+ ADD_ICONST(kFSEventStreamEventFlagItemInodeMetaMod);
+ ADD_ICONST(kFSEventStreamEventFlagItemRenamed);
+ ADD_ICONST(kFSEventStreamEventFlagItemModified);
+ ADD_ICONST(kFSEventStreamEventFlagItemFinderInfoMod);
+ ADD_ICONST(kFSEventStreamEventFlagItemChangeOwner);
+ ADD_ICONST(kFSEventStreamEventFlagItemXattrMod);
+ ADD_ICONST(kFSEventStreamEventFlagItemIsFile);
+ ADD_ICONST(kFSEventStreamEventFlagItemIsDir);
+ ADD_ICONST(kFSEventStreamEventFlagItemIsSymlink);
 
-    THIS->object_data = dta;
+
+// flags for the stream creation
+ ADD_ICONST(kFSEventStreamCreateFlagFileEvents);
+ ADD_ICONST(kFSEventStreamCreateFlagIgnoreSelf);
+ ADD_ICONST(kFSEventStreamCreateFlagWatchRoot);
+ ADD_ICONST(kFSEventStreamCreateFlagNoDefer);
+ ADD_ICONST(kFSEventStreamCreateFlagNone);
+
+  ADD_ICONST(kFSEventStreamEventIdSinceNow);
+
+  INIT;
+ 
 }
 
 PIKE_MODULE_EXIT 
 {
-  if(THIS->object_data)
-  {
-    free(THIS->object_data);
-  }
   EXIT;
+
 }
 
+}
+
+/**
+ * FSEvents callback function. For each event that occurs an instance of SCEvent
+ * is created and passed to the delegate. The frequency at which this callback is
+ * called depends upon the notification latency value. This callback is usually
+ * called with more than one event and so multiple instances of SCEvent are created
+ * and the delegate notified.
+ *
+ * @param streamRef          The calling stream reference
+ * @param clientCallBackInfo Any client callback info that was supplied when the stream was created
+ * @param numEvents          The number of events being supplied
+ * @param eventPaths         An array of the event's paths
+ * @param eventFlags         An array of flags associated with the events
+ * @param eventIds           An array of IDs associated with the events
+ */
+static void event_callback(ConstFSEventStreamRef streamRef,
+                              void *clientCallBackInfo,
+                              size_t numEvents,
+                              void *eventPaths,
+                              const FSEventStreamEventFlags eventFlags[],
+                              const FSEventStreamEventId eventIds[])
+{
+  size_t cnt = 0;
+  for(cnt = 0; cnt < numEvents; cnt++)
+  {
+     NSString * eventPath;
+     NSStringEncoding enc;
+     struct pike_string * str;
+     const char * u8s;
+	 struct EventStream_struct * eventStreamObj;
+
+  	 enc =  NSUTF8StringEncoding;
+     
+	 eventPath = (NSString *)CFArrayGetValueAtIndex(eventPaths, (CFIndex)cnt);
+	 u8s = [eventPath UTF8String];
+	 str = make_shared_binary_string(u8s, [eventPath lengthOfBytesUsingEncoding: enc]);
+	 push_string(str);
+	 f_utf8_to_string(1);
+	 push_int(eventFlags[cnt]);
+	 push_int(eventIds[cnt]);
+	 eventStreamObj = (struct EventStream_struct *)(clientCallBackInfo);
+ 	 apply_svalue(&eventStreamObj->callback_func, 3);
+  }
+}
 
 /*! @endclass
  */
@@ -67,4 +253,8 @@ PIKE_MODULE_EXIT
 /*! @endmodule
  */
 
+/*! @endmodule
+ */
 
+
+#endif /* HAVE_FRAMEWORK_CORESERVICES */
