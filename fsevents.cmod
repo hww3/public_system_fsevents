@@ -1,0 +1,70 @@
+/*! @module Public
+ */
+
+/*! @module Sample
+ */
+
+#define _GNU_SOURCE
+
+#include "sample_config.h"
+#include "util.h"
+
+
+
+/*! @class Sample
+ */
+
+DECLARATIONS
+
+typedef struct
+{
+    int started;
+} SAMPLE_OBJECT_DATA;
+
+CVAR SAMPLE_OBJECT_DATA   *object_data;
+
+
+/*! @decl void create(string appname)
+ *!   Creates a new Public.Sample.Sample object
+ *!
+ */
+PIKEFUN void create(string appname)
+{
+  pop_n_elems(args);
+}
+
+PIKECLASS foo
+{
+}
+
+PIKE_MODULE_INIT
+{
+  INIT;
+    SAMPLE_OBJECT_DATA * dta = 
+	(SAMPLE_OBJECT_DATA*)malloc(sizeof(SAMPLE_OBJECT_DATA));
+    if (!dta)
+        Pike_error("init_sample: Out of memory!\n");
+
+    THIS->object_data = dta;
+}
+
+PIKE_MODULE_EXIT 
+{
+  if(THIS->object_data)
+  {
+    free(THIS->object_data);
+  }
+  EXIT;
+}
+
+
+/*! @endclass
+ */
+
+/*! @endmodule
+ */
+
+/*! @endmodule
+ */
+
+
