@@ -51,6 +51,7 @@ static void backend_callback(struct callback *_cb,
 							  }
 							}
 
+void low_stop();
 
 /*! @class EventStream
  */
@@ -59,7 +60,7 @@ DECLARATIONS
 PIKECLASS EventStream
 {
   CVAR FSEventStreamRef stream;
-  CVAR isRunning;
+  CVAR int isRunning;
   PIKEVAR function callback_func;
 
 /*! @decl void add_backend_runloop()

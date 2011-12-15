@@ -1,4 +1,4 @@
-CC=/usr/local/pike/7.8.603/include/pike/smartlink gcc-4.2
+CC=/usr/local/pike/7.9.5/include/pike/smartlink /usr/bin/gcc-4.2
 CXX=/Users/hww3/devel/pike/build/darwin-11.2.0-x86_64/smartlink g++
 CPP=/usr/bin/gcc-4.2 -E
 MOD_LDSHARED=gcc-4.2 -g  -O3 -pipe -ggdb3 -m64 -msse3 -mfpmath=sse -DMAC_OS_X_VERSION_MIN_REQUIRED=1070 -bundle -bind_at_load -undefined dynamic_lookup  
