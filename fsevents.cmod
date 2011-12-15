@@ -59,6 +59,7 @@ DECLARATIONS
 PIKECLASS EventStream
 {
   CVAR FSEventStreamRef stream;
+  CVAR isRunning;
   PIKEVAR function callback_func;
 
 /*! @decl void add_backend_runloop()
@@ -80,7 +81,8 @@ PIKEFUN void create(array paths, float latency, int|void sinceWhen, int|void fla
   FSEventStreamEventId _sinceWhen;
   FSEventStreamCreateFlags _flags;
   int idx = 0, cnt = 0;
-
+  
+  THIS->isRunning = 0;
   if(sinceWhen && sinceWhen->type == T_INT)
   {
     _sinceWhen = sinceWhen->u.integer;
@@ -149,11 +151,33 @@ PIKEFUN void start()
 	CFRunLoopRef runLoop;
 	
 	runLoop = CFRunLoopGetCurrent();
-	
+
+	THIS->isRunning = 1;
+  
 	FSEventStreamScheduleWithRunLoop(THIS->stream, runLoop, kCFRunLoopDefaultMode);
 	FSEventStreamStart(THIS->stream);
 }
 
+PIKEFUN void stop()
+{
+  low_stop();
+}
+
+void low_stop()
+{
+  CFRunLoopRef runLoop;
+
+  if(THIS->isRunning)
+  {
+    runLoop = CFRunLoopGetCurrent();
+
+    FSEventStreamStop(THIS->stream);
+    FSEventStreamUnscheduleFromRunLoop(THIS->stream, runLoop, kCFRunLoopDefaultMode);
+
+    THIS->isRunning = 0;
+  }
+
+}
 
 PIKE_MODULE_INIT
 {
@@ -195,17 +219,16 @@ PIKE_MODULE_INIT
 PIKE_MODULE_EXIT 
 {
   EXIT;
-
+  low_stop();
+  if(THIS->stream != NULL) FSEventStreamRelease(THIS->stream);
 }
 
 }
 
 /**
- * FSEvents callback function. For each event that occurs an instance of SCEvent
- * is created and passed to the delegate. The frequency at which this callback is
+ * FSEvents callback function. The frequency at which this callback is
  * called depends upon the notification latency value. This callback is usually
- * called with more than one event and so multiple instances of SCEvent are created
- * and the delegate notified.
+ * called with more than one event and so multiple calls to the callback occur.
  *
  * @param streamRef          The calling stream reference
  * @param clientCallBackInfo Any client callback info that was supplied when the stream was created
