@@ -21,12 +21,19 @@
 #import <Foundation/Foundation.h>
 #import <CoreServices/CoreServices.h>
 
+void low_stop();
+
 static void event_callback(ConstFSEventStreamRef streamRef,
                              void *clientCallBackInfo,
                              size_t numEvents,
                              void *eventPaths,
                              const FSEventStreamEventFlags eventFlags[],
                              const FSEventStreamEventId eventIds[]);
+
+
+static void backend_callback(struct callback *_cb,
+					        void *arg,
+		    				void *backend);
 
 static void backend_callback(struct callback *_cb,
 							        void *arg,
@@ -51,17 +58,8 @@ static void backend_callback(struct callback *_cb,
 							  }
 							}
 
-void low_stop();
-
-/*! @class EventStream
- */
 DECLARATIONS
 
-PIKECLASS EventStream
-{
-  CVAR FSEventStreamRef stream;
-  CVAR int isRunning;
-  PIKEVAR function callback_func;
 
 /*! @decl void add_backend_runloop()
  *!
@@ -69,6 +67,38 @@ PIKECLASS EventStream
 PIKEFUN int add_backend_runloop()
 {
       add_backend_callback( backend_callback, 0, 0);
+}
+
+
+/*! @class EventStream
+ */
+
+PIKECLASS EventStream
+{
+  CVAR FSEventStreamRef stream;
+  CVAR int isRunning;
+  PIKEVAR function callback_func;
+
+/*! @decl void flush_async()
+ *!
+*/
+PIKEFUN void flush_async()
+{
+  if(THIS->stream)
+	FSEventStreamFlushAsync(THIS->stream);
+  else
+    Pike_error("FSEvents.EventStream: not started\n");
+}
+
+/*! @decl void flush_sync()
+ *!
+*/
+PIKEFUN void flush_sync()
+{
+  if(THIS->stream)
+	FSEventStreamFlushSync(THIS->stream);
+  else
+    Pike_error("FSEvents.EventStream: not started\n");
 }
 
 /*! @decl void create(array(string) paths)
