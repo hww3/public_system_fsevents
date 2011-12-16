@@ -18,6 +18,8 @@
 
 #ifdef HAVE_FRAMEWORK_CORESERVICES
 
+DECLARATIONS
+
 #import <Foundation/Foundation.h>
 #import <CoreServices/CoreServices.h>
 
@@ -29,7 +31,6 @@ static void event_callback(ConstFSEventStreamRef streamRef,
                              void *eventPaths,
                              const FSEventStreamEventFlags eventFlags[],
                              const FSEventStreamEventId eventIds[]);
-
 
 static void backend_callback(struct callback *_cb,
 					        void *arg,
@@ -58,17 +59,14 @@ static void backend_callback(struct callback *_cb,
 							  }
 							}
 
-DECLARATIONS
-
 
 /*! @decl void add_backend_runloop()
  *!
  */
 PIKEFUN int add_backend_runloop()
 {
-      add_backend_callback( backend_callback, 0, 0);
+  add_backend_callback( backend_callback, 0, 0);
 }
-
 
 /*! @class EventStream
  */
@@ -151,6 +149,7 @@ PIKEFUN void create(array paths, float latency, int|void sinceWhen, int|void fla
     str = CFStringCreateWithBytes(NULL, (const UInt8 *)(Pike_sp[-1].u.string->str), (CFIndex)Pike_sp[-1].u.string->len, kCFStringEncodingUTF8, false);
 	pop_stack();
 	CFArrayInsertValueAtIndex( (CFMutableArrayRef)_paths, cnt, str);
+	CFRelease(str);
 	cnt++;
   }
 
@@ -289,6 +288,7 @@ static void event_callback(ConstFSEventStreamRef streamRef,
 	 eventPath = (NSString *)CFArrayGetValueAtIndex(eventPaths, (CFIndex)cnt);
 	 u8s = [eventPath UTF8String];
 	 str = make_shared_binary_string(u8s, [eventPath lengthOfBytesUsingEncoding: enc]);
+//	 CFRelease((CFStringRef)eventPath);
 	 push_string(str);
 	 f_utf8_to_string(1);
 	 push_int(eventFlags[cnt]);

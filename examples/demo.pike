@@ -1,18 +1,19 @@
 
 object m;
 
-void cb(mixed ... args)
+import Public.System;
+
+void cb(string path, int flags, int event_id)
 {
-werror("%O\n", args);
+werror("%s => %s, %d\n", path, FSEvents.describe_event_flag(flags), event_id);
 }
 
 int main()
 {
+ FSEvents.add_backend_runloop();         
 
- m = module.EventStream(({"/Users/hww3/devel"}), 3.0, module.kFSEventStreamEventIdSinceNow, module.kFSEventStreamCreateFlagNone);
-m->callback_func = (cb); 
- m->add_backend_runloop();         
-m->start();
-werror("m->callback_func: %O\n", m->callback_func);
+ m = FSEvents.EventStream(({"/Users/hww3/Music/iTunes/iTunes Media/Music"}), 3.0, FSEvents.kFSEventStreamEventIdSinceNow, FSEvents.kFSEventStreamCreateFlagNone);
+ m->callback_func = (cb); 
+ m->start();
  return -1;
 }
