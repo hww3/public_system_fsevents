@@ -18,10 +18,11 @@
 
 #ifdef HAVE_FRAMEWORK_CORESERVICES
 
-DECLARATIONS
 
 #import <Foundation/Foundation.h>
 #import <CoreServices/CoreServices.h>
+
+DECLARATIONS
 
 void low_stop();
 
@@ -52,10 +53,7 @@ static void backend_callback(struct callback *_cb,
 							    backend_lower_timeout(backend, &timeout);
 							  } else
 							  {
-
 							     SInt32 result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
-						//	printf("result: %d, %d\n", result, kCFRunLoopRunTimedOut);
-							//    [[NSRunLoop currentRunLoop] runUntilDate: [NSDate date]];
 							  }
 							}
 
@@ -75,11 +73,17 @@ PIKECLASS EventStream
 {
   CVAR FSEventStreamRef stream;
   CVAR int isRunning;
+  CVAR CFArrayRef _paths;
+  CVAR FSEventStreamEventId _sinceWhen;
+  CVAR FSEventStreamCreateFlags _flags;
+  CVAR CFAbsoluteTime _latency;
+  CVAR CFRunLoopRef runLoop;
+
   PIKEVAR function callback_func;
 
 /*! @decl void flush_async()
  *!
-*/
+ */
 PIKEFUN void flush_async()
 {
   if(THIS->stream)
@@ -90,7 +94,7 @@ PIKEFUN void flush_async()
 
 /*! @decl void flush_sync()
  *!
-*/
+ */
 PIKEFUN void flush_sync()
 {
   if(THIS->stream)
@@ -105,68 +109,78 @@ PIKEFUN void flush_sync()
  */
 PIKEFUN void create(array paths, float latency, int|void sinceWhen, int|void flags)
 {
-  FSEventStreamContext context;
-  CFArrayRef _paths;
-  FSEventStreamEventId _sinceWhen;
-  FSEventStreamCreateFlags _flags;
   int idx = 0, cnt = 0;
   
   THIS->isRunning = 0;
+  THIS->_latency = latency;
+
   if(sinceWhen && sinceWhen->type == T_INT)
   {
-    _sinceWhen = sinceWhen->u.integer;
+    THIS->_sinceWhen = sinceWhen->u.integer;
   }
   else
   {
-    _sinceWhen = kFSEventStreamEventIdSinceNow;
+    THIS->_sinceWhen = kFSEventStreamEventIdSinceNow;
   }
 
   if(flags && flags->type == T_INT)
   {
-    _flags = flags->u.integer;
+    THIS->_flags = flags->u.integer;
   }
   else
   {
-    _flags = kFSEventStreamCreateFlagNone;
+    THIS->_flags = kFSEventStreamCreateFlagNone;
   }
-
-  context.version = 0;
-  context.info = THIS;
-  context.retain = NULL;
-  context.release = NULL;
-  context.copyDescription = NULL;
   
-  _paths = CFArrayCreateMutable(NULL, paths->size, NULL);
+  THIS->_paths = CFArrayCreateMutable(NULL, 0, NULL);
+  CFRetain(THIS->_paths);
 
-  for(idx = 0; idx < paths->size; idx++)
+  if(paths && paths->size)
   {
-    struct svalue sv;
-	CFStringRef str;
-    if(ITEM(paths)[idx].type != T_STRING) continue;
-    sv = ITEM(paths)[idx];
-	push_svalue(&sv);
-	f_string_to_utf8(1);
-    str = CFStringCreateWithBytes(NULL, (const UInt8 *)(Pike_sp[-1].u.string->str), (CFIndex)Pike_sp[-1].u.string->len, kCFStringEncodingUTF8, false);
-	pop_stack();
-	CFArrayInsertValueAtIndex( (CFMutableArrayRef)_paths, cnt, str);
-	CFRelease(str);
-	cnt++;
-  }
 
-  THIS->stream = FSEventStreamCreate(kCFAllocatorDefault,
-		&event_callback,
-		&context,
-		_paths,
-		_sinceWhen,
-		latency,
-//		kFSEventStreamCreateFlagNone
-		_flags | kFSEventStreamCreateFlagUseCFTypes
-		);
-		
-  CFRelease(_paths);
+    for(idx = 0; idx < paths->size; idx++)
+    {
+      struct svalue sv;
+	  CFStringRef str;
+      if(ITEM(paths)[idx].type != T_STRING) continue;
+      sv = ITEM(paths)[idx];
+	  push_svalue(&sv);
+	  f_string_to_utf8(1);
+      str = CFStringCreateWithBytes(NULL, (const UInt8 *)(Pike_sp[-1].u.string->str), (CFIndex)Pike_sp[-1].u.string->len, kCFStringEncodingUTF8, false);
+	  pop_stack();
+	  CFArrayInsertValueAtIndex( (CFMutableArrayRef)THIS->_paths, cnt, str);
+	  cnt++;
+    }
+  }
+	
   pop_n_elems(args);
 
   return;
+}
+
+/*! @decl void add_path(string path)
+ *!   Add a path to the monitor list.
+ *!
+ *!  @note
+ *!    this can only be called when the monitor is stopped.
+ */
+PIKEFUN void add_path(string path)
+{
+  if(THIS->isRunning)
+  {
+	Pike_error("Cannot add paths while monitor is started.\n");
+  }
+
+  if(path && path->len)
+  {
+	int size;
+    CFStringRef str;
+	f_string_to_utf8(1);
+    str = CFStringCreateWithBytes(NULL, (const UInt8 *)(Pike_sp[-1].u.string->str), (CFIndex)Pike_sp[-1].u.string->len, kCFStringEncodingUTF8, false);
+	size = CFArrayGetCount(THIS->_paths);
+	CFArrayInsertValueAtIndex( (CFMutableArrayRef)THIS->_paths, size, str);
+  }
+  pop_stack();
 }
 
 PIKEFUN void set_callback(function callback)
@@ -178,14 +192,49 @@ PIKEFUN void set_callback(function callback)
 // TODO we should allow the runloop to be specified.
 PIKEFUN void start()
 {
-	CFRunLoopRef runLoop;
-	
-	runLoop = CFRunLoopGetCurrent();
+  	FSEventStreamContext context;
 
-	THIS->isRunning = 1;
-  
-	FSEventStreamScheduleWithRunLoop(THIS->stream, runLoop, kCFRunLoopDefaultMode);
-	FSEventStreamStart(THIS->stream);
+    if(THIS->isRunning)
+    {
+      Pike_error("monitor is already running.\n");
+    }
+
+	if(CFArrayGetCount(THIS->_paths))
+	{	
+		THIS->runLoop = CFRunLoopGetCurrent();
+
+	  	context.version = 0;
+	  	context.info = THIS;
+	  	context.retain = NULL;
+	  	context.release = NULL;
+	  	context.copyDescription = NULL;
+
+		if(!THIS->_paths)
+      		Pike_error("no paths.\n");
+			if(!THIS->_sinceWhen)
+	      		Pike_error("no startdate.\n");
+				if(!THIS->_latency)
+		      		Pike_error("no latency.\n");
+printf("creating stream.\n");
+
+	  	THIS->stream = FSEventStreamCreate(kCFAllocatorDefault,
+			&event_callback,
+			&context,
+			THIS->_paths,
+			THIS->_sinceWhen,
+			THIS->_latency,
+			THIS->_flags |
+			 kFSEventStreamCreateFlagUseCFTypes
+			);
+		printf("created.\n");
+		THIS->isRunning = 1;
+		FSEventStreamScheduleWithRunLoop(THIS->stream, THIS->runLoop, kCFRunLoopDefaultMode);
+		FSEventStreamStart(THIS->stream);
+	}
+	else
+	{
+		Pike_error("No paths registered for monitoring.\n");
+	}
 }
 
 PIKEFUN void stop()
@@ -195,19 +244,17 @@ PIKEFUN void stop()
 
 void low_stop()
 {
-  CFRunLoopRef runLoop;
 
   if(THIS->isRunning)
   {
-    runLoop = CFRunLoopGetCurrent();
-
     FSEventStreamStop(THIS->stream);
-    FSEventStreamUnscheduleFromRunLoop(THIS->stream, runLoop, kCFRunLoopDefaultMode);
-
+    FSEventStreamUnscheduleFromRunLoop(THIS->stream, THIS->runLoop, kCFRunLoopDefaultMode);
+  	FSEventStreamRelease(THIS->stream);
     THIS->isRunning = 0;
   }
 
 }
+
 
 PIKE_MODULE_INIT
 {
@@ -246,14 +293,17 @@ PIKE_MODULE_INIT
  
 }
 
+
 PIKE_MODULE_EXIT 
 {
   EXIT;
   low_stop();
-  if(THIS->stream != NULL) FSEventStreamRelease(THIS->stream);
+  if(THIS->_paths) CFRelease(THIS->_paths);  
 }
 
 }
+#endif /* HAVE_FRAMEWORK_CORESERVICES */
+
 
 /**
  * FSEvents callback function. The frequency at which this callback is
@@ -267,6 +317,8 @@ PIKE_MODULE_EXIT
  * @param eventFlags         An array of flags associated with the events
  * @param eventIds           An array of IDs associated with the events
  */
+
+
 static void event_callback(ConstFSEventStreamRef streamRef,
                               void *clientCallBackInfo,
                               size_t numEvents,
@@ -288,7 +340,6 @@ static void event_callback(ConstFSEventStreamRef streamRef,
 	 eventPath = (NSString *)CFArrayGetValueAtIndex(eventPaths, (CFIndex)cnt);
 	 u8s = [eventPath UTF8String];
 	 str = make_shared_binary_string(u8s, [eventPath lengthOfBytesUsingEncoding: enc]);
-//	 CFRelease((CFStringRef)eventPath);
 	 push_string(str);
 	 f_utf8_to_string(1);
 	 push_int(eventFlags[cnt]);
@@ -297,6 +348,8 @@ static void event_callback(ConstFSEventStreamRef streamRef,
  	 apply_svalue(&eventStreamObj->callback_func, 3);
   }
 }
+
+
 
 /*! @endclass
  */
@@ -311,4 +364,3 @@ static void event_callback(ConstFSEventStreamRef streamRef,
  */
 
 
-#endif /* HAVE_FRAMEWORK_CORESERVICES */
