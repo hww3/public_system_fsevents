@@ -81,6 +81,15 @@ PIKECLASS EventStream
 
   PIKEVAR function callback_func;
 
+
+/*! @decl int is_started()
+ *!
+ */
+PIKEFUN int is_started()
+{
+  RETURN(THIS->isRunning);
+}
+
 /*! @decl void flush_async()
  *!
  */
@@ -244,15 +253,14 @@ PIKEFUN void stop()
 
 void low_stop()
 {
-
   if(THIS->isRunning)
   {
     FSEventStreamStop(THIS->stream);
     FSEventStreamUnscheduleFromRunLoop(THIS->stream, THIS->runLoop, kCFRunLoopDefaultMode);
+	FSEventStreamInvalidate(THIS->stream);
   	FSEventStreamRelease(THIS->stream);
     THIS->isRunning = 0;
   }
-
 }
 
 
