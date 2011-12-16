@@ -1,9 +1,13 @@
-constant __author = "Foo Bar <foo@bar.com>";
+constant __author = "Bill Welliver <bill@welliver.org>";
 constant __version = "1.0";
 
 // if necessary, inherit the C language module here.
 inherit Public.System.___FSEvents;
 
+//!  describe the event flags associated with an event.
+//!
+//! @returns
+//!   a string describing the flags set.
 string describe_event_flag(int mask) {
         array(string) list = ({});
         
