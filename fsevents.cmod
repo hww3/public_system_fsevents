@@ -19,12 +19,13 @@
 #ifdef HAVE_FRAMEWORK_CORESERVICES
 
 
-#import <Foundation/Foundation.h>
+//#import <Foundation/Foundation.h>
 #import <CoreServices/CoreServices.h>
 
 DECLARATIONS
 
 void low_stop();
+struct pike_string * string_from_cfstring(CFStringRef cfString);
 
 static void event_callback(ConstFSEventStreamRef streamRef,
                              void *clientCallBackInfo,
@@ -33,51 +34,18 @@ static void event_callback(ConstFSEventStreamRef streamRef,
                              const FSEventStreamEventFlags eventFlags[],
                              const FSEventStreamEventId eventIds[]);
 
-static void backend_callback(struct callback *_cb,
-					        void *arg,
-		    				void *backend);
-
-static void backend_callback(struct callback *_cb,
-							        void *arg,
-					     			void *backend)
-							{
-							  if(backend)
-							  {
-							    struct timeval timeout = current_time;
-							    timeout.tv_usec += 20000;
-							    if(timeout.tv_usec > 1000000)
-							    {
-							      timeout.tv_usec-=1000000;
-							      timeout.tv_sec+=1;
-							    }
-							    backend_lower_timeout(backend, &timeout);
-							  } else
-							  {
-							     SInt32 result = CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0, false);
-							  }
-							}
-
-
-/*! @decl void add_backend_runloop()
- *!
- */
-PIKEFUN int add_backend_runloop()
-{
-  add_backend_callback( backend_callback, 0, 0);
-}
-
 /*! @class EventStream
  */
 
 PIKECLASS EventStream
 {
+  CVAR CFRunLoopRef runLoop;
   CVAR FSEventStreamRef stream;
   CVAR int isRunning;
   CVAR CFArrayRef _paths;
   CVAR FSEventStreamEventId _sinceWhen;
   CVAR FSEventStreamCreateFlags _flags;
   CVAR CFAbsoluteTime _latency;
-  CVAR CFRunLoopRef runLoop;
 
   PIKEVAR function callback_func;
 
@@ -337,17 +305,13 @@ static void event_callback(ConstFSEventStreamRef streamRef,
   size_t cnt = 0;
   for(cnt = 0; cnt < numEvents; cnt++)
   {
-     NSString * eventPath;
-     NSStringEncoding enc;
+     CFStringRef eventPath;
      struct pike_string * str;
      const char * u8s;
 	 struct EventStream_struct * eventStreamObj;
 
-  	 enc =  NSUTF8StringEncoding;
-     
-	 eventPath = (NSString *)CFArrayGetValueAtIndex(eventPaths, (CFIndex)cnt);
-	 u8s = [eventPath UTF8String];
-	 str = make_shared_binary_string(u8s, [eventPath lengthOfBytesUsingEncoding: enc]);
+	 eventPath = CFArrayGetValueAtIndex(eventPaths, (CFIndex)cnt);
+	 str = string_from_cfstring(eventPath);
 	 push_string(str);
 	 f_utf8_to_string(1);
 	 push_int(eventFlags[cnt]);
@@ -357,6 +321,35 @@ static void event_callback(ConstFSEventStreamRef streamRef,
   }
 }
 
+struct pike_string * string_from_cfstring(CFStringRef cfString)
+{
+  const char *useUTF8StringPtr = NULL;
+  UInt8 *freeUTF8StringPtr = NULL;
+  struct pike_string * str = NULL;
+  long utf8Length;
+
+  CFIndex stringLength = CFStringGetLength(cfString), usedBytes = 0L;
+
+  if((useUTF8StringPtr = CFStringGetCStringPtr(cfString, kCFStringEncodingUTF8)) == NULL) {
+    if((freeUTF8StringPtr = malloc(stringLength + 1L)) != NULL) {
+      CFStringGetBytes(cfString, CFRangeMake(0L, stringLength), kCFStringEncodingUTF8, '?', false, freeUTF8StringPtr, stringLength, &usedBytes);
+      freeUTF8StringPtr[usedBytes] = 0;
+      useUTF8StringPtr = (const char *)freeUTF8StringPtr;
+    }
+  }
+
+  utf8Length = (long)((freeUTF8StringPtr != NULL) ? usedBytes : stringLength);
+
+  if(useUTF8StringPtr != NULL) {
+    // useUTF8StringPtr points to a NULL terminated UTF8 encoded string.
+    // utf8Length contains the length of the UTF8 string.
+    str = make_shared_binary_string(useUTF8StringPtr, utf8Length);
+  }
+
+  if(freeUTF8StringPtr != NULL) { free(freeUTF8StringPtr); freeUTF8StringPtr = NULL; }
+
+  return str;
+}
 
 
 /*! @endclass
