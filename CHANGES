@@ -1,0 +1,1 @@
+- now works with PollDeviceBackend based on CFRunLoop
