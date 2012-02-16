@@ -14,6 +14,13 @@ int main(int argc, array(string argv)
    if(sizeof(argv))
     dir = argv[1];
 
+#if constant(Pike.DefaultBackend.GOT_CORE_FOUNDATION)
+   Pike.DefaultBackend.enable_core_foundation(1);
+#else
+   werror("Pike does not have support for Core Foundation. FSEvents will not function!\n");
+   exit(1);
+#endif
+
    werror("watching %O for changes...\n", dir);
 
    m = FSEvents.EventStream(({}), 3.0, FSEvents.kFSEventStreamEventIdSinceNow, 
